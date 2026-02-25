@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Võistluse lipp — Beachside Racetrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body { overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div id="flag-screen" class="flag-screen flag-none"></div>
+
+  <button class="fullscreen-btn" onclick="toggleFullscreen()">Täisekraan</button>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const flagScreen = document.getElementById('flag-screen');
+
+    socket.on('state-update', (data) => {
+      const active = data.sessions.find(s => s.status === 'active');
+      if (active && active.raceMode) {
+        setFlag(active.raceMode);
+      } else {
+        if (data.lastFinishedSession && data.lastFinishedSession.raceMode === 'danger') {
+          setFlag('danger');
+        } else {
+          setFlag('none');
+        }
+      }
+    });
+
+    function setFlag(mode) {
+      flagScreen.className = 'flag-screen flag-' + mode;
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+  </script>
+</body>
+</html>

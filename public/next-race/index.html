@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Järgmine võistlus — Beachside Racetrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="content" class="next-race-display">
+    <div class="empty-state">
+      <p>Tulevasi võistlusi pole.</p>
+    </div>
+  </div>
+
+  <button class="fullscreen-btn" onclick="toggleFullscreen()">Täisekraan</button>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    socket.on('state-update', (data) => {
+      render(data);
+    });
+
+    function render(data) {
+      const content = document.getElementById('content');
+      const activeSession = data.sessions.find(s => s.status === 'active');
+      const nextUpcoming = data.sessions.find(s => s.status === 'upcoming');
+
+      let sessionToShow = null;
+      let showPaddockMsg = false;
+
+      if (activeSession) {
+        sessionToShow = nextUpcoming;
+        showPaddockMsg = false;
+      } else if (nextUpcoming) {
+        sessionToShow = nextUpcoming;
+        showPaddockMsg = data.lastFinishedSession !== null;
+      }
+
+      if (!sessionToShow || sessionToShow.drivers.length === 0) {
+        content.innerHTML = `
+          <div class="empty-state" style="padding-top:20vh;">
+            <p style="font-size:1.5rem;">Tulevasi võistlusi pole</p>
+          </div>
+        `;
+        return;
+      }
+
+      content.innerHTML = `
+        <h2>Järgmine võistlus</h2>
+        ${showPaddockMsg ? '<div class="paddock-msg">Palun suunduge boksi</div>' : ''}
+        <ul class="next-race-drivers">
+          ${sessionToShow.drivers.map(d => `
+            <li>
+              <span class="car-badge">${d.carNumber}</span>
+              <span>${escapeHtml(d.name)}</span>
+            </li>
+          `).join('')}
+        </ul>
+      `;
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+  </script>
+</body>
+</html>

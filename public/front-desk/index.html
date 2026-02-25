@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registratuur — Beachside Racetrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- Autentimise overlay -->
+  <div id="auth-overlay" class="auth-overlay">
+    <div class="auth-box">
+      <h2>Registratuur</h2>
+      <p>Sisesta registratuuri pääsuvõti jätkamiseks.</p>
+      <div id="auth-error" class="error-msg"></div>
+      <input type="password" id="auth-key" placeholder="Pääsuvõti" autocomplete="off">
+      <button id="auth-submit" class="btn btn-primary btn-block">Sisene</button>
+    </div>
+  </div>
+
+  <!-- Põhiliides -->
+  <div id="app" style="display:none;">
+    <div class="container">
+      <div class="page-header">
+        <h1>Registratuur</h1>
+        <div class="subtitle">Halda võistlussessioone ja sõitjaid</div>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <button id="create-session-btn" class="btn btn-primary">+ Uus sessioon</button>
+      </div>
+
+      <div id="sessions-list"></div>
+
+      <div id="no-sessions" class="empty-state" style="display:none;">
+        <p>Ühtegi tulevast sessiooni pole. Loo uus alustamiseks.</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/socket-auth.js"></script>
+  <script>
+    let socket;
+
+    initAuth('front-desk', (s) => {
+      socket = s;
+      document.getElementById('app').style.display = 'block';
+      init();
+    });
+
+    function init() {
+      document.getElementById('create-session-btn').addEventListener('click', () => {
+        socket.emit('create-session');
+      });
+
+      socket.on('state-update', (data) => {
+        renderSessions(data.sessions.filter(s => s.status === 'upcoming'));
+      });
+    }
+
+    function renderSessions(sessions) {
+      const container = document.getElementById('sessions-list');
+      const noSessions = document.getElementById('no-sessions');
+
+      if (sessions.length === 0) {
+        container.innerHTML = '';
+        noSessions.style.display = 'block';
+        return;
+      }
+
+      noSessions.style.display = 'none';
+      container.innerHTML = sessions.map((session, idx) => `
+        <div class="card">
+          <div class="card-header">
+            <h3>Sessioon ${idx + 1}</h3>
+            <button class="btn btn-danger btn-sm" onclick="deleteSession('${session.id}')">Kustuta</button>
+          </div>
+          <ul class="driver-list" id="drivers-${session.id}">
+            ${session.drivers.map(d => `
+              <li class="driver-item">
+                <span class="car-badge">${d.carNumber}</span>
+                <span class="driver-name" id="name-${session.id}-${d.carNumber}">${escapeHtml(d.name)}</span>
+                <div class="driver-actions">
+                  <button class="btn btn-outline btn-sm" onclick="startEdit('${session.id}', ${d.carNumber}, '${escapeAttr(d.name)}')">Muuda</button>
+                  <button class="btn btn-danger btn-sm" onclick="removeDriver('${session.id}', ${d.carNumber})">Eemalda</button>
+                </div>
+              </li>
+            `).join('')}
+          </ul>
+          ${session.drivers.length < 8 ? `
+            <div class="add-driver-form">
+              <input type="text" id="input-${session.id}" placeholder="Sõitja nimi" maxlength="50"
+                onkeydown="if(event.key==='Enter')addDriver('${session.id}')">
+              <button class="btn btn-primary btn-sm" onclick="addDriver('${session.id}')">Lisa sõitja</button>
+            </div>
+          ` : '<p style="color:var(--text-muted);margin-top:12px;font-size:0.85rem;">Maksimaalselt 8 sõitjat.</p>'}
+        </div>
+      `).join('');
+    }
+
+    function deleteSession(sessionId) {
+      socket.emit('delete-session', { sessionId });
+    }
+
+    function addDriver(sessionId) {
+      const input = document.getElementById('input-' + sessionId);
+      const name = input.value.trim();
+      if (!name) return;
+      socket.emit('add-driver', { sessionId, name });
+      input.value = '';
+      input.focus();
+    }
+
+    function removeDriver(sessionId, carNumber) {
+      socket.emit('remove-driver', { sessionId, carNumber });
+    }
+
+    function startEdit(sessionId, carNumber, currentName) {
+      const nameEl = document.getElementById(`name-${sessionId}-${carNumber}`);
+      nameEl.innerHTML = `
+        <input class="inline-edit-input" id="edit-${sessionId}-${carNumber}" value="${escapeAttr(currentName)}"
+          onkeydown="if(event.key==='Enter')saveEdit('${sessionId}',${carNumber});if(event.key==='Escape')cancelEdit();"
+          onblur="saveEdit('${sessionId}',${carNumber})">
+      `;
+      const editInput = document.getElementById(`edit-${sessionId}-${carNumber}`);
+      editInput.focus();
+      editInput.select();
+    }
+
+    function saveEdit(sessionId, carNumber) {
+      const editInput = document.getElementById(`edit-${sessionId}-${carNumber}`);
+      if (!editInput) return;
+      const name = editInput.value.trim();
+      if (name) {
+        socket.emit('edit-driver', { sessionId, carNumber, name });
+      }
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function escapeAttr(str) {
+      return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>

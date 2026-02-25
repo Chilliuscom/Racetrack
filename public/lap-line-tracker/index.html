@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Ringivaatleja — Beachside Racetrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- Autentimise overlay -->
+  <div id="auth-overlay" class="auth-overlay">
+    <div class="auth-box">
+      <h2>Ringivaatleja</h2>
+      <p>Sisesta vaatleja pääsuvõti jätkamiseks.</p>
+      <div id="auth-error" class="error-msg"></div>
+      <input type="password" id="auth-key" placeholder="Pääsuvõti" autocomplete="off">
+      <button id="auth-submit" class="btn btn-primary btn-block">Sisene</button>
+    </div>
+  </div>
+
+  <!-- Põhiliides -->
+  <div id="app" style="display:none;">
+    <div id="content"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/socket-auth.js"></script>
+  <script>
+    let socket;
+
+    initAuth('lap-line-tracker', (s) => {
+      socket = s;
+      document.getElementById('app').style.display = 'block';
+      init();
+    });
+
+    function init() {
+      socket.on('state-update', (data) => {
+        render(data);
+      });
+    }
+
+    function render(data) {
+      const content = document.getElementById('content');
+      const activeSession = data.sessions.find(s => s.status === 'active');
+
+      if (!activeSession) {
+        content.innerHTML = `
+          <div class="waiting-msg" style="padding-top:30vh;">
+            <p>Ootan võistluse algust...</p>
+          </div>
+        `;
+        return;
+      }
+
+      const isFinished = activeSession.raceMode === 'finish';
+      const canRecord = activeSession.raceMode && activeSession.raceMode !== 'danger';
+
+      content.innerHTML = `
+        ${isFinished ? '<div class="session-ended-msg" style="padding:12px;">Võistlus lõppenud — autod naasevad boksi</div>' : ''}
+        <div class="lap-grid">
+          ${activeSession.drivers.map(d => `
+            <button class="lap-btn"
+              onclick="recordLap(${d.carNumber})"
+              ${!canRecord ? 'disabled' : ''}>${d.carNumber}</button>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function recordLap(carNumber) {
+      socket.emit('record-lap', { carNumber });
+    }
+  </script>
+</body>
+</html>

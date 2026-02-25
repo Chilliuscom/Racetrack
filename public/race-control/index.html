@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Võistluse juhtimine — Beachside Racetrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <!-- Autentimise overlay -->
+  <div id="auth-overlay" class="auth-overlay">
+    <div class="auth-box">
+      <h2>Võistluse juhtimine</h2>
+      <p>Sisesta ohutusametniku pääsuvõti jätkamiseks.</p>
+      <div id="auth-error" class="error-msg"></div>
+      <input type="password" id="auth-key" placeholder="Pääsuvõti" autocomplete="off">
+      <button id="auth-submit" class="btn btn-primary btn-block">Sisene</button>
+    </div>
+  </div>
+
+  <!-- Põhiliides -->
+  <div id="app" style="display:none;">
+    <div class="container">
+      <div class="page-header">
+        <h1>Võistluse juhtimine</h1>
+        <div class="subtitle">Ohutusametniku liides</div>
+      </div>
+
+      <div id="content"></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/socket-auth.js"></script>
+  <script>
+    let socket;
+    let currentState = null;
+
+    const MODE_LABELS = {
+      safe: 'OHUTU',
+      hazard: 'OHT',
+      danger: 'PUNANE',
+      finish: 'FINIŠ',
+      none: 'PUUDUB'
+    };
+
+    initAuth('race-control', (s) => {
+      socket = s;
+      document.getElementById('app').style.display = 'block';
+      init();
+    });
+
+    function init() {
+      socket.on('state-update', (data) => {
+        currentState = data;
+        render(data);
+      });
+
+      socket.on('timer-tick', ({ remaining }) => {
+        const timerEl = document.getElementById('race-timer');
+        if (timerEl) {
+          timerEl.textContent = formatTime(remaining);
+        }
+      });
+    }
+
+    function render(data) {
+      const content = document.getElementById('content');
+      const activeSession = data.sessions.find(s => s.status === 'active');
+      const nextUpcoming = data.sessions.find(s => s.status === 'upcoming');
+
+      if (activeSession) {
+        renderActiveRace(content, activeSession, data.raceTimeRemaining);
+      } else if (nextUpcoming) {
+        renderNextSession(content, nextUpcoming);
+      } else {
+        content.innerHTML = `
+          <div class="waiting-msg">
+            <p>Sessioone pole saadaval.</p>
+            <p style="margin-top:8px;font-size:0.9rem;">Palu registratuuril luua uus sessioon.</p>
+          </div>
+        `;
+      }
+    }
+
+    function renderNextSession(container, session) {
+      container.innerHTML = `
+        <div class="card">
+          <div class="card-header">
+            <h3>Järgmine sessioon</h3>
+          </div>
+          <div class="session-info">
+            ${session.drivers.length === 0 ? '<p style="color:var(--text-muted);">Sõitjaid pole veel lisatud.</p>' :
+              `<ul class="driver-list">
+                ${session.drivers.map(d => `
+                  <li class="driver-item">
+                    <span class="car-badge">${d.carNumber}</span>
+                    <span class="driver-name">${escapeHtml(d.name)}</span>
+                  </li>
+                `).join('')}
+              </ul>`
+            }
+          </div>
+          <button class="btn btn-green btn-block" style="margin-top:16px;padding:16px;font-size:1.1rem;"
+            onclick="startRace()" ${session.drivers.length === 0 ? 'disabled' : ''}>
+            Alusta võistlust
+          </button>
+        </div>
+      `;
+    }
+
+    function renderActiveRace(container, session, remaining) {
+      const mode = session.raceMode;
+      const isFinished = mode === 'finish';
+
+      container.innerHTML = `
+        <div class="race-info-bar">
+          <div>
+            <span style="color:var(--text-muted);font-size:0.8rem;">AEGA JÄÄNUD</span><br>
+            <span class="timer-display" id="race-timer">${formatTime(remaining)}</span>
+          </div>
+          <div>
+            <span class="flag-indicator flag-${mode}">${MODE_LABELS[mode] || 'PUUDUB'}</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-bottom:12px;">Sõitjad</h3>
+          <ul class="driver-list">
+            ${session.drivers.map(d => {
+              const lap = session.laps[d.carNumber];
+              return `
+                <li class="driver-item">
+                  <span class="car-badge">${d.carNumber}</span>
+                  <span class="driver-name">${escapeHtml(d.name)}</span>
+                  <span style="color:var(--text-muted);font-size:0.85rem;">
+                    Ring ${lap ? lap.count : 0}
+                    ${lap && lap.fastestLap ? ' | Parim: ' + formatLapTime(lap.fastestLap) : ''}
+                  </span>
+                </li>
+              `;
+            }).join('')}
+          </ul>
+        </div>
+
+        ${!isFinished ? `
+          <div class="mode-buttons">
+            <button class="btn btn-green ${mode === 'safe' ? 'active-mode' : ''}" onclick="setMode('safe')">Ohutu</button>
+            <button class="btn btn-yellow ${mode === 'hazard' ? 'active-mode' : ''}" onclick="setMode('hazard')">Oht</button>
+            <button class="btn btn-red ${mode === 'danger' ? 'active-mode' : ''}" onclick="setMode('danger')">Punane</button>
+            <button class="btn btn-chequered" onclick="setMode('finish')">Finiš</button>
+          </div>
+        ` : `
+          <div style="text-align:center;margin:24px 0;">
+            <p style="color:var(--text-muted);margin-bottom:16px;">Võistlus lõppenud. Lõpeta sessioon, kui kõik autod on boksi naasnud.</p>
+            <button class="btn btn-danger" style="padding:16px 32px;font-size:1.1rem;" onclick="endSession()">Lõpeta sessioon</button>
+          </div>
+        `}
+      `;
+    }
+
+    function startRace() {
+      socket.emit('start-race');
+    }
+
+    function setMode(mode) {
+      socket.emit('set-mode', { mode });
+    }
+
+    function endSession() {
+      socket.emit('end-session');
+    }
+
+    function formatTime(ms) {
+      if (ms === null || ms === undefined) return '--:--';
+      const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    }
+
+    function formatLapTime(ms) {
+      const totalSeconds = ms / 1000;
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = (totalSeconds % 60).toFixed(1);
+      if (minutes > 0) {
+        return minutes + ':' + String(seconds).padStart(4, '0');
+      }
+      return seconds + 's';
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

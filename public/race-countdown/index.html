@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Võistluse taimer — Beachside Racetrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div id="countdown" class="countdown-display">--:--</div>
+
+  <button class="fullscreen-btn" onclick="toggleFullscreen()">Täisekraan</button>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const countdownEl = document.getElementById('countdown');
+
+    socket.on('state-update', (data) => {
+      const active = data.sessions.find(s => s.status === 'active');
+      if (active && data.raceTimeRemaining !== null) {
+        countdownEl.textContent = formatTime(data.raceTimeRemaining);
+      } else {
+        countdownEl.textContent = '--:--';
+      }
+    });
+
+    socket.on('timer-tick', ({ remaining }) => {
+      countdownEl.textContent = formatTime(remaining);
+    });
+
+    function formatTime(ms) {
+      if (ms === null || ms === undefined) return '--:--';
+      const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+  </script>
+</body>
+</html>

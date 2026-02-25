@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edetabel — Beachside Racetrack</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="page-header">
+      <h1>Edetabel</h1>
+      <div class="subtitle">Beachside Racetrack</div>
+    </div>
+
+    <div id="race-bar" class="race-info-bar" style="display:none;">
+      <div>
+        <span style="color:var(--text-muted);font-size:0.8rem;">AEGA JÄÄNUD</span><br>
+        <span class="timer-display" id="race-timer">--:--</span>
+      </div>
+      <div>
+        <span class="flag-indicator" id="flag-badge">—</span>
+      </div>
+    </div>
+
+    <div id="leaderboard"></div>
+
+    <div id="no-race" class="empty-state">
+      <p>Võistluse andmed puuduvad.</p>
+    </div>
+  </div>
+
+  <button class="fullscreen-btn" onclick="toggleFullscreen()">Täisekraan</button>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    const MODE_LABELS = {
+      safe: 'OHUTU',
+      hazard: 'OHT',
+      danger: 'PUNANE',
+      finish: 'FINIŠ'
+    };
+
+    socket.on('state-update', (data) => {
+      render(data);
+    });
+
+    socket.on('timer-tick', ({ remaining }) => {
+      const timerEl = document.getElementById('race-timer');
+      if (timerEl) {
+        timerEl.textContent = formatTime(remaining);
+      }
+    });
+
+    function render(data) {
+      const activeSession = data.sessions.find(s => s.status === 'active');
+      const displaySession = activeSession || data.lastFinishedSession;
+
+      const raceBar = document.getElementById('race-bar');
+      const leaderboard = document.getElementById('leaderboard');
+      const noRace = document.getElementById('no-race');
+
+      if (!displaySession) {
+        raceBar.style.display = 'none';
+        leaderboard.innerHTML = '';
+        noRace.style.display = 'block';
+        return;
+      }
+
+      noRace.style.display = 'none';
+      raceBar.style.display = 'flex';
+
+      const timerEl = document.getElementById('race-timer');
+      if (activeSession) {
+        timerEl.textContent = formatTime(data.raceTimeRemaining);
+      } else {
+        timerEl.textContent = 'LÕPPENUD';
+      }
+
+      const badge = document.getElementById('flag-badge');
+      const mode = displaySession.raceMode || 'none';
+      badge.className = 'flag-indicator flag-' + mode;
+      badge.textContent = MODE_LABELS[mode] || '—';
+
+      const entries = displaySession.drivers.map(d => ({
+        ...d,
+        lap: displaySession.laps[d.carNumber] || { count: 0, fastestLap: null }
+      }));
+
+      entries.sort((a, b) => {
+        if (a.lap.fastestLap === null && b.lap.fastestLap === null) return 0;
+        if (a.lap.fastestLap === null) return 1;
+        if (b.lap.fastestLap === null) return -1;
+        return a.lap.fastestLap - b.lap.fastestLap;
+      });
+
+      leaderboard.innerHTML = `
+        <table class="leaderboard-table">
+          <thead>
+            <tr>
+              <th>Koht</th>
+              <th>Auto</th>
+              <th>Sõitja</th>
+              <th>Ringid</th>
+              <th>Parim ring</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${entries.map((e, i) => `
+              <tr>
+                <td class="position">${i + 1}</td>
+                <td><span class="car-badge">${e.carNumber}</span></td>
+                <td>${escapeHtml(e.name)}</td>
+                <td>${e.lap.count}</td>
+                <td class="lap-time">${e.lap.fastestLap ? formatLapTime(e.lap.fastestLap) : '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function formatTime(ms) {
+      if (ms === null || ms === undefined) return '--:--';
+      const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+    }
+
+    function formatLapTime(ms) {
+      const totalSeconds = ms / 1000;
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = (totalSeconds % 60).toFixed(1);
+      if (minutes > 0) {
+        return minutes + ':' + String(seconds).padStart(4, '0');
+      }
+      return seconds + 's';
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+  </script>
+</body>
+</html>
