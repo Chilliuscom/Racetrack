@@ -4,6 +4,14 @@ Reaalajas võistlusraja haldussüsteem, mis võimaldab töötajatel seadistada v
 
 Ehitatud **Node.js**, **Express** ja **Socket.IO** baasil.
 
+Projekt on loodud programmeerimiskooli [kood.tech](https://kood.tech) nooremarendaja programmi raames.
+
+**Projekti juht:** Andres Agan
+
+**Arendajad:** Lee Paju, Rene Koort, Janek Valtin
+
+**Live demo:** [https://racetrack-production-93ad.up.railway.app](https://racetrack-production-93ad.up.railway.app)
+
 ---
 
 ## Paigaldamine
@@ -13,7 +21,7 @@ Ehitatud **Node.js**, **Express** ja **Socket.IO** baasil.
 - Node.js (v16 või uuem)
 - npm
 
-### 1. Sõltuvuste paigaldamine
+### 1. Paigaldamine
 
 ```bash
 npm install
